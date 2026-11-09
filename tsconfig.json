@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-, "app/actions/uploadReport1 copy_ts_bak", "app/actions/uploadReport1 copy 2.bak", "app/actions/uploadReport.bak", "app/dashboard/page2_tsx_bak", "app/dashboard/page1_tsx_bak"  ],
+, "app/actions/uploadReport1 copy_ts_bak", "app/actions/uploadReport1 copy 2.bak", "app/actions/uploadReport.bak", "app/dashboard/page2_tsx_bak", "app/dashboard/page1_tsx_bak", "components/DashboardClient1_tsx_bak", "components/DashboardClient_tsx_bak"  ],
   "exclude": ["node_modules"]
 }
