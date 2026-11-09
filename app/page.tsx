@@ -184,7 +184,7 @@ export default function HomePage() {
       <footer className="border-t border-slate-900 bg-slate-950 py-8">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <p>© 2025 Thamanna Enterprises. All rights reserved.</p>
-          <p className="font-mono text-[11px]">Next.js 16 • MongoDB Atlas • 2FA Secured</p>
+          <p className="font-mono text-[11px]">• 2FA Secured</p>
         </div>
       </footer>
 
