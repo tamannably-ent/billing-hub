@@ -1,69 +1,193 @@
-import Image from "next/image";
+// app/page.tsx
+import React from 'react';
+import Link from 'next/link';
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased flex flex-col justify-between selection:bg-blue-600 selection:text-white">
+      
+      {/* TOP NAVIGATION BAR */}
+      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-lg shadow-lg shadow-blue-600/30">
+              T
+            </div>
+            <div>
+              <span className="text-base font-extrabold tracking-wide text-white block leading-none">
+                THAMANNA ENTERPRISES
+              </span>
+              <span className="text-[11px] font-semibold tracking-widest text-blue-400 uppercase mt-1 block">
+                Franchisee Billing & Revenue Hub
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Link
+              href="/login"
+              className="text-xs font-bold text-slate-300 hover:text-white transition-colors px-3 py-2"
+            >
+              Admin Sign In
+            </Link>
+            <Link
+              href="/dashboard"
+              className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-600/25 hover:bg-blue-500 transition-all active:scale-95"
+            >
+              Access Dashboard →
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* MAIN HERO & FRANCHISEE OVERVIEW SECTION */}
+      <main className="max-w-7xl mx-auto px-6 py-16 md:py-24 w-full space-y-20">
+        
+        {/* Hero Banner */}
+        <div className="max-w-3xl space-y-6">
+          <div className="inline-flex items-center gap-2 rounded-full bg-slate-900 border border-slate-800 px-4 py-1.5 text-xs font-semibold text-blue-400">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Partner Code: SKTBLY_TAMANNA • Ballari (BLY) SSA</span>
+          </div>
+
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white leading-[1.1]">
+            Telecom Revenue Share & <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Commission Ledger</span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-2xl">
+            Centralized administrative portal for tracking monthly BSNL franchisee payouts, reconciling invoice collections, and auditing multi-endpoint circuit shares across FTTH and Leased Line networks.
           </p>
+
+          <div className="pt-2 flex flex-wrap items-center gap-4">
+            <Link
+              href="/dashboard"
+              className="rounded-xl bg-blue-600 px-7 py-4 text-sm font-bold text-white shadow-xl shadow-blue-600/20 hover:bg-blue-500 transition-all inline-flex items-center gap-2"
+            >
+              <span>Launch Revenue Dashboard</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+
+            <Link
+              href="/register"
+              className="rounded-xl bg-slate-900 border border-slate-800 px-7 py-4 text-sm font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+            >
+              Provision Admin Access
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* FRANCHISEE REVENUE SHARE SEGMENT CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          
+          {/* Card 1: FTTH Segment Overview */}
+          <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-8 space-y-5 hover:border-blue-500/40 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="h-12 w-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-2xl">
+                🌐
+              </div>
+              <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                Broadband & Voice
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-white">FTTH Revenue Share Management</h2>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                Track residential and commercial Fiber-to-the-Home connections by Telephone Number, Billing Account, and BB User ID.
+              </p>
+            </div>
+
+            <ul className="space-y-2.5 pt-2 text-xs text-slate-300 border-t border-slate-800/80">
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">✓</span>
+                <span>Automated OLT maintenance franchisee share tracking</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">✓</span>
+                <span>Duplicate billing entry detection and cumulative share aggregation</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">✓</span>
+                <span>Month-wise horizontal pivot grids and Excel report exports</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Card 2: Leased Line (LC) Segment Overview */}
+          <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-8 space-y-5 hover:border-emerald-500/40 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="h-12 w-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-2xl">
+                ⚡
+              </div>
+              <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Enterprise Circuits
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-white">Leased Line (LC) Commission Ledger</h2>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                Dedicated enterprise MPLS VPN and Point-to-Point (P2P) circuit tracking indexed by unique Leased Circuit IDs (LC ID).
+              </p>
+            </div>
+
+            <ul className="space-y-2.5 pt-2 text-xs text-slate-300 border-t border-slate-800/80">
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">✓</span>
+                <span>Dual-endpoint reconciliation combining END_A and END_B commissions</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">✓</span>
+                <span>ONT acquisition and fixed bandwidth commission breakdowns</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">✓</span>
+                <span>Isolated circuit database with visual multi-endpoint indicators</span>
+              </li>
+            </ul>
+          </div>
+
         </div>
+
+        {/* FRANCHISEE METADATA STRIP */}
+        <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950/30 border border-slate-800 p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+              Protected Administrative Environment
+            </h3>
+            <p className="text-xs text-slate-400">
+              Protected by Role-Based Access Control (RBAC) and Email Two-Factor Authentication (2FA).
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-6 text-left md:text-right w-full md:w-auto border-t md:border-t-0 border-slate-800 pt-4 md:pt-0">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-slate-500 block">Zone / Circle</span>
+              <span className="text-sm font-mono font-bold text-slate-200">SZ / KT</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-slate-500 block">BA / SSA</span>
+              <span className="text-sm font-mono font-bold text-slate-200">BLY / BLY</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-slate-500 block">Org Code</span>
+              <span className="text-sm font-mono font-bold text-blue-400">18455</span>
+            </div>
+          </div>
+        </div>
+
       </main>
+
+      {/* FOOTER */}
+      <footer className="border-t border-slate-900 bg-slate-950 py-8">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <p>© {new Date().getFullYear()} Thamanna Enterprises. All rights reserved.</p>
+          <p className="font-mono text-[11px]">Next.js 16 • MongoDB Atlas • 2FA Secured</p>
+        </div>
+      </footer>
+
     </div>
   );
 }
