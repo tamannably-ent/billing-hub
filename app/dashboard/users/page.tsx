@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { updateUserRole } from '@/app/actions/manageUsers';
 
 // export const revalidate = 0;
+export const instant = false;
 
 export default async function UserApprovalsPage() {
   const users = await prisma.user.findMany({

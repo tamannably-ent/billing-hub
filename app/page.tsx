@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import Image from 'next/image';
 
 // export const revalidate = 0; // Ensures live database metrics load on every visit
+export const instant = false;
 
 async function getLiveDashboardMetrics() {
   try {
