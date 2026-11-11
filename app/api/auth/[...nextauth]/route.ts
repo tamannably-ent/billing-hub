@@ -67,9 +67,17 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.role = (user as any).role;
+      const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+
+      if (user) {
+        token.role =
+          superAdminEmail && user.email?.toLowerCase() === superAdminEmail
+            ? 'ADMIN'
+            : (user as any).role;
+      }
       return token;
     },
+    
     async session({ session, token }) {
       if (session.user) (session.user as any).role = token.role;
       return session;

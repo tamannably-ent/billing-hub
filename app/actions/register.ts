@@ -23,11 +23,14 @@ export async function registerAdminUser(formData: FormData) {
         name,
         email,
         password: hashedPassword,
-        role: "ADMIN" // Standard authorization access level constraint configuration
+        role: "USER" // Standard authorization access level constraint configuration
       }
     });
 
-    return { success: true, message: "Administrative profile compiled successfully!" };
+    return { 
+      success: true, 
+      message: 'Account registered as standard USER. Please wait for an existing Admin to approve your account before accessing the dashboard.', 
+    };
   } catch (error: any) {
     return { success: false, error: error.message || "Registration failed." };
   }
