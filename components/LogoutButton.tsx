@@ -8,7 +8,7 @@ export default function SignOutButton() {
   const handleLogout = async () => {
     // Triggers the session termination sequence and routes the browser back to the login page
     await signOut({ 
-      callbackUrl: '/login',
+      callbackUrl: '/',
       redirect: true 
     });
   };

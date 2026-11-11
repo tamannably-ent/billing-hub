@@ -1,10 +1,12 @@
-// app/page.tsx (Part 1 - Server Data Fetcher & Top Header)
+// app/page.tsx (Part 1 - Session-Protected Data Fetcher & Top Header)
 import React from 'react';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import Image from 'next/image';
 
-// export const revalidate = 0; // Ensures live database metrics load on every visit
+// export const revalidate = 0;
 export const instant = false;
 
 async function getLiveDashboardMetrics() {
@@ -52,7 +54,12 @@ async function getLiveDashboardMetrics() {
 }
 
 export default async function HomePage() {
-  const metrics = await getLiveDashboardMetrics();
+  // 🛠️ 1. Verify active server session before fetching sensitive financial data
+  const session = await getServerSession(authOptions);
+  const isAuthorizedAdmin = Boolean(session && (session.user as any)?.role === 'ADMIN');
+
+  // 🛠️ 2. Only query MongoDB if the user is an authenticated Admin
+  const metrics = isAuthorizedAdmin ? await getLiveDashboardMetrics() : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased flex flex-col justify-between selection:bg-blue-600 selection:text-white">
@@ -62,8 +69,7 @@ export default async function HomePage() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-blue-600/5 flex items-center justify-center font-black text-white text-lg shadow-lg shadow-blue-600/30">
-            <Image src={'/images/logo_transparent.png'} alt='logo' width={40} height={40} className="object-contain" />
-              
+                <Image src={'/images/logo_transparent.png'} alt='logo' width={40} height={40} className="object-contain" />
             </div>
             <div>
               <span className="text-base font-extrabold tracking-wide text-white block leading-none">
@@ -76,12 +82,18 @@ export default async function HomePage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Link
-              href="/login"
-              className="text-xs font-bold text-slate-300 hover:text-white transition-colors px-3 py-2"
-            >
-              Admin Sign In
-            </Link>
+            {!isAuthorizedAdmin ? (
+              <Link
+                href="/login"
+                className="text-xs font-bold text-slate-300 hover:text-white transition-colors px-3 py-2"
+              >
+                Admin Sign In
+              </Link>
+            ) : (
+              <span className="text-xs font-semibold text-emerald-400 hidden sm:inline">
+                ● {session?.user?.name || session?.user?.email}
+              </span>
+            )}
             <Link
               href="/dashboard"
               className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-600/25 hover:bg-blue-500 transition-all active:scale-95"
@@ -91,6 +103,7 @@ export default async function HomePage() {
           </div>
         </div>
       </header>
+
       {/* app/page.tsx (Part 2 - Hero Banner & Live KPI Cards) */}
       <main className="max-w-7xl mx-auto px-6 py-14 md:py-20 w-full space-y-16">
         
@@ -129,63 +142,87 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* LIVE DATABASE SUMMARY KPI CARDS */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">
-              Live MongoDB Atlas Network Summary
-            </h2>
-            <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
-              ● Live Sync
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {/* KPI 1: Active FTTH Profiles */}
-            <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 space-y-2">
-              <span className="text-xs font-semibold text-slate-400 block">FTTH Profiles Tracked</span>
-              <p className="text-3xl font-black text-white font-mono">
-                {metrics.ftthCount.toLocaleString('en-IN')}
-              </p>
-              <span className="text-[11px] text-blue-400 font-medium block">
-                Broadband & Voice Lines
+        {/* LIVE DATABASE SUMMARY KPI CARDS (VISIBLE ONLY TO LOGGED-IN ADMINS) */}
+        {isAuthorizedAdmin && metrics ? (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Live - Network Summary
+              </h2>
+              <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                ● Live Sync (Admin Verified)
               </span>
             </div>
 
-            {/* KPI 2: Active Leased Circuits */}
-            <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 space-y-2">
-              <span className="text-xs font-semibold text-slate-400 block">Leased Circuits (LC IDs)</span>
-              <p className="text-3xl font-black text-white font-mono">
-                {metrics.llCount.toLocaleString('en-IN')}
-              </p>
-              <span className="text-[11px] text-indigo-400 font-medium block">
-                MPLS VPN & P2P Circuits
-              </span>
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {/* KPI 1: Active FTTH Profiles */}
+              <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 space-y-2">
+                <span className="text-xs font-semibold text-slate-400 block">FTTH Profiles Tracked</span>
+                <p className="text-3xl font-black text-white font-mono">
+                  {metrics.ftthCount.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[11px] text-blue-400 font-medium block">
+                  Broadband & Voice Lines
+                </span>
+              </div>
 
-            {/* KPI 3: FTTH Cumulative Share */}
-            <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 space-y-2">
-              <span className="text-xs font-semibold text-slate-400 block">Total FTTH Share</span>
-              <p className="text-3xl font-black text-emerald-400 font-mono">
-                ₹{Math.round(metrics.ftthTotalShare).toLocaleString('en-IN')}
-              </p>
-              <span className="text-[11px] text-slate-500 font-medium block">
-                Cumulative Logged Payout
-              </span>
-            </div>
+              {/* KPI 2: Active Leased Circuits */}
+              <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 space-y-2">
+                <span className="text-xs font-semibold text-slate-400 block">Leased Circuits (LC IDs)</span>
+                <p className="text-3xl font-black text-white font-mono">
+                  {metrics.llCount.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[11px] text-indigo-400 font-medium block">
+                  MPLS VPN & P2P Circuits
+                </span>
+              </div>
 
-            {/* KPI 4: Combined Network Share */}
-            <div className="rounded-2xl bg-gradient-to-br from-blue-950/60 to-slate-900 border border-blue-800/40 p-6 space-y-2">
-              <span className="text-xs font-semibold text-blue-300 block">Combined Network Share</span>
-              <p className="text-3xl font-black text-white font-mono">
-                ₹{Math.round(metrics.combinedRevenueShare).toLocaleString('en-IN')}
-              </p>
-              <span className="text-[11px] text-emerald-400 font-medium block">
-                FTTH + Leased Line Total
-              </span>
+              {/* KPI 3: FTTH Cumulative Share */}
+              <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-6 space-y-2">
+                <span className="text-xs font-semibold text-slate-400 block">Total FTTH Share</span>
+                <p className="text-3xl font-black text-emerald-400 font-mono">
+                  ₹{Math.round(metrics.ftthTotalShare).toLocaleString('en-IN')}
+                </p>
+                <span className="text-[11px] text-slate-500 font-medium block">
+                  Cumulative Logged Payout
+                </span>
+              </div>
+
+              {/* KPI 4: Combined Network Share */}
+              <div className="rounded-2xl bg-gradient-to-br from-blue-950/60 to-slate-900 border border-blue-800/40 p-6 space-y-2">
+                <span className="text-xs font-semibold text-blue-300 block">Combined Network Share</span>
+                <p className="text-3xl font-black text-white font-mono">
+                  ₹{Math.round(metrics.combinedRevenueShare).toLocaleString('en-IN')}
+                </p>
+                <span className="text-[11px] text-emerald-400 font-medium block">
+                  FTTH + Leased Line Total
+                </span>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : (
+          /* PUBLIC VISITOR LOCKED PLACEHOLDER */
+          <section className="rounded-2xl bg-slate-900/70 border border-slate-800 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-lg">
+                🔒
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-white">Live Financial Metrics Hidden</h2>
+                <p className="text-xs text-slate-400">
+                  Sign in with an approved Admin account to view live FTTH & Leased Line revenue figures.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/login"
+              className="rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2.5 text-xs font-bold text-white transition-colors shrink-0"
+            >
+              Sign In to Unlock Metrics →
+            </Link>
+          </section>
+        )}
+
         {/* app/page.tsx (Part 3 - Segment Cards, Metadata Strip & Footer) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           
@@ -290,8 +327,8 @@ export default async function HomePage() {
       {/* FOOTER */}
       <footer className="border-t border-slate-900 bg-slate-950 py-8">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {new Date().getFullYear()} Thamanna Enterprises. All rights reserved.</p>
-          <p className="font-mono text-[11px]">Next.js 16 • MongoDB Atlas • 2FA Secured</p>
+          <p>©2025  Thamanna Enterprises. All rights reserved.</p>
+          <p className="font-mono text-[11px]"> • 2FA Secured</p>
         </div>
       </footer>
 

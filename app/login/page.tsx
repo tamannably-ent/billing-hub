@@ -119,7 +119,7 @@ function LoginTerminal() {
         if (response?.error) {
           setErrorMessage('Invalid or expired security code.');
         } else {
-          router.push('/dashboard');
+          router.push('/');
           router.refresh();
         }
       } catch (err) {
