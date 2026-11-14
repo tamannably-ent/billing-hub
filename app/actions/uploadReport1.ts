@@ -258,7 +258,7 @@ export async function uploadBothData(jsonData: any[]) {
       }
 
       // Parallel operational batch execution arrays pushing cleanly to Atlas
-      const CHUNK_SIZE = 100;
+      const CHUNK_SIZE = 120;
       for (let i = 0; i < creates.length; i += CHUNK_SIZE) {
         const chunk = creates.slice(i, i + CHUNK_SIZE);
         await Promise.all(chunk.map(data => prisma.leasedLine.create({ data })));

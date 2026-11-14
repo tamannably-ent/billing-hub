@@ -43,6 +43,12 @@ export default function DashboardClient({ ftthInitial, llInitial }: DashboardCli
 
   const [dbStorage, setDbStorage] = useState<{ usedMb: number; usagePercentage: number; isApproachingLimit: boolean } | null>(null);
 
+  // progress
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; processed: number; percentage: number } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  // 🛠️ NEW TIMER STATE: Tracks the processing duration elapsed in seconds
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+
   // 1. Direct active state target toggle pointer (Isolates collections completely)
   const activeTabRawData = useMemo(() => {
     return activeTab === 'FTTH' ? ftthInitial : llInitial;
@@ -286,48 +292,84 @@ export default function DashboardClient({ ftthInitial, llInitial }: DashboardCli
 // components/DashboardClient.tsx (Part 3 - Excel Upload Parsers & File Exporters)
 
 const handleExcelParsed = async (parsedData: any[]) => {
+  if (!parsedData || parsedData.length === 0) return;
+
   setSyncMessage(null);
   setSelectedMonths([]);
   setCurrentPage(1);
+  setIsUploading(true);
+  setUploadProgress({ total: parsedData.length, processed: 0, percentage: 0 });
+  
+  // 🛠️ START THE CLOCK TIMER: Reset to 0 and increment every 1 second
+  setElapsedTime(0);
+  const timerInterval = setInterval(() => {
+    setElapsedTime((prev) => prev + 1);
+  }, 1000);
 
   startTransition(async () => {
+    try {
+      const CLIENT_CHUNK_SIZE = 100;
+      let cumulativeProcessed = 0;
 
-  
-  try {
-    // Clean prototypes safely into flat primitive strings for network transfers
-    const cleanSerialized = JSON.parse(JSON.stringify(parsedData));
-    const result = await uploadBothData(cleanSerialized);
-    
-    if (result.success) {
-      setSyncMessage({ type: 'success', text: result.message ?? 'Synced successfully!' });
+      const cleanSerialized = JSON.parse(JSON.stringify(parsedData));
+
+      for (let i = 0; i < cleanSerialized.length; i += CLIENT_CHUNK_SIZE) {
+        const chunk = cleanSerialized.slice(i, i + CLIENT_CHUNK_SIZE);
+        
+        const result = await uploadBothData(chunk);
+        
+        if (!result.success) {
+          clearInterval(timerInterval); // Stop clock on failure
+          setSyncMessage({ type: 'error', text: result.error });
+          alert(`❌ Database Sync Failure:\n\n${result.error}`);
+          setIsUploading(false);
+          setUploadProgress(null);
+          return;
+        }
+
+        cumulativeProcessed += chunk.length;
+        const currentPercentage = Math.min(Math.round((cumulativeProcessed / cleanSerialized.length) * 100), 100);
+        
+        setUploadProgress({
+          total: cleanSerialized.length,
+          processed: cumulativeProcessed,
+          percentage: currentPercentage
+        });
+      }
+
+      // 🛠️ SUCCESS: Clear clock timer cleanly on processing completion
+      clearInterval(timerInterval);
+      setSyncMessage({ type: 'success', text: `Successfully synced all ${cleanSerialized.length} records!` });
       alert('🎉 Report successfully uploaded and saved to MongoDB Atlas!');
       window.location.reload(); 
-    } else {
-      setSyncMessage({ type: 'error', text: result.error });
-      alert(`❌ Database Sync Failure:\n\n${result.error}`);
-    }
-  } catch (err: any) {
-    console.error('Network catch boundary intercept:', err);
-    const rawErrorMessage = err.message || '';
-    let clearUserExplanation = 'An unexpected database connection error occurred.';
 
-    if (rawErrorMessage.includes('P2010') || rawErrorMessage.includes('Server selection timeout')) {
-      clearUserExplanation = 
-        '🚨 MongoDB Atlas Connection Blocked!\n\n' +
-        'Reason: The database server actively refused the connection handshake.\n\n' +
-        'Action Required:\n' +
-        '1. Log into your MongoDB Atlas Cloud Console.\n' +
-        '2. Navigate to Security -> Network Access.\n' +
-        '3. Add your current public IP address to the whitelist (or enter 0.0.0.0/0 to allow connections from anywhere).';
-    } else {
-      clearUserExplanation = `System Exception: ${rawErrorMessage}`;
-    }
+    } catch (err: any) {
+      clearInterval(timerInterval); // Stop clock on exception crash
+      console.error('Network catch boundary intercept:', err);
+      const rawErrorMessage = err.message || '';
+      let clearUserExplanation = 'An unexpected database connection error occurred.';
 
-    setSyncMessage({ type: 'error', text: clearUserExplanation });
-    alert(clearUserExplanation); // Interrupts viewport layout shift and handles bad routing states explicitly
-  }
-})
+      if (rawErrorMessage.includes('P2010') || rawErrorMessage.includes('Server selection timeout')) {
+        clearUserExplanation = 
+          '🚨 MongoDB Atlas Connection Blocked!\n\n' +
+          'Reason: The database server actively refused the connection handshake.\n\n' +
+          'Action Required:\n' +
+          '1. Log into your MongoDB Atlas Cloud Console.\n' +
+          '2. Navigate to Security -> Network Access.\n' +
+          '3. Add your current public IP address to the whitelist (or enter 0.0.0.0/0 to allow connections from anywhere).';
+      } else {
+        clearUserExplanation = `System Exception: ${rawErrorMessage}`;
+      }
+
+      setSyncMessage({ type: 'error', text: clearUserExplanation });
+      alert(clearUserExplanation);
+      setIsUploading(false);
+      setUploadProgress(null);
+    }
+  });
 };
+
+
 
 const handleDownloadExcel = () => {
   try {
@@ -745,11 +787,62 @@ return (
       )}
     </section>
 
-    {/* 🛠️ REAL-TIME FULL-SCREEN INTERACTIVE PROCESSING LOADING BACKDROP OVERLAY */}
-    {isPending && (
+     {/* REAL-TIME ROW COUNTER, PERCENTAGE COMPLETION & ELAPSED TIME MODAL OVERLAY */}
+      {isUploading && uploadProgress && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-md transition-opacity">
+          <div className="flex flex-col items-center rounded-2xl bg-white p-8 shadow-2xl max-w-sm w-full mx-4 text-center space-y-4">
+            
+            {/* Pulsing Spinning Ring Loader */}
+            <div className="relative">
+              <svg className="h-16 w-16 animate-spin text-blue-600" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.162 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center font-mono text-xs font-black text-blue-600">
+                {uploadProgress.percentage}%
+              </div>
+            </div>
+            
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-gray-900">Synchronizing Telecom Ledger</h3>
+              <p className="text-xs text-gray-400 font-medium tracking-wider uppercase">Piping rows to MongoDB Atlas...</p>
+            </div>
+
+            {/* 🛠️ LIVE ELAPSED TIME TRACKER CHIP */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 border border-gray-200 text-xs font-mono font-bold text-gray-700 shadow-inner">
+              <svg className="w-3.5 h-3.5 text-gray-500 animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Time Elapsed: {elapsedTime >= 60 ? `${Math.floor(elapsedTime / 60)}m ${elapsedTime % 60}s` : `${elapsedTime}s`}</span>
+            </div>
+
+            {/* REAL-TIME PROGRESS INDICATOR METER BAR SECTION */}
+            <div className="w-full space-y-1.5">
+              <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden border shadow-inner flex">
+                <div 
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-300 ease-out shadow-sm" 
+                  style={{ width: `${uploadProgress.percentage}%` }}
+                ></div>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-gray-500 font-mono font-semibold">
+                <span>Processed: {uploadProgress.processed.toLocaleString()} accounts</span>
+                <span>Total: {uploadProgress.total.toLocaleString()} rows</span>
+              </div>
+            </div>
+            
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700 border border-amber-100 animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+              Please do not close or reload this window
+            </div>
+          </div>
+        </div>
+      )}
+
+    🛠️ REAL-TIME FULL-SCREEN INTERACTIVE PROCESSING LOADING BACKDROP OVERLAY
+    {/* {isPending && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-sm transition-opacity">
           <div className="flex flex-col items-center rounded-2xl bg-white p-8 shadow-2xl border border-gray-100 max-w-sm w-full mx-4 text-center">
-            {/* Animated SVG Loader Spinner */}
+            {/* Animated SVG Loader Spinner 
             <div className="relative mb-4">
               <svg className="h-12 w-12 animate-spin text-blue-600" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -765,14 +858,14 @@ return (
               Chunking data rows into batches, validating identities, and executing transaction pools to MongoDB Atlas cluster...
             </p>
             
-            {/* Pulsing state tracker label indicator */}
+            {/* Pulsing state tracker label indicator 
             <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-700 animate-pulse border border-blue-100">
               <span className="h-1.5 w-1.5 rounded-full bg-blue-600"></span>
               Please do not close this window
             </div>
           </div>
         </div>
-      )}
+      )} */}
   </div>
 
   
