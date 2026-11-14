@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
-export const dynamic = 'force-dynamic';
+// export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Request maximum server duration on Vercel
 
 export async function POST(req: Request) {
