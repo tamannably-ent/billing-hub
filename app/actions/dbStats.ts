@@ -18,7 +18,7 @@ export async function getDatabaseStorageStatus() {
     const logicalSizeInBytes = dataSizeInBytes + indexSizeInBytes;
 
     // 🛠️ FIX 3: Convert bytes directly to Megabytes (1 MB = 1024 * 1024 Bytes)
-    const logicalSizeMb = 144 + logicalSizeInBytes / (1024 * 1024);
+    const logicalSizeMb =  logicalSizeInBytes / (1024 * 1024);
 
     // 512 MB hard ceiling maximum limitation allocation constraint for MongoDB Atlas M0 free clusters
     const maxFreeTierLimitMb = 512; 

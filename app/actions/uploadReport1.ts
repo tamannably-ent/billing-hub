@@ -335,6 +335,23 @@ export async function uploadBothData(jsonData: any[]) {
 
           if (existingSub) {
             matchedCount++;
+
+            // Create a map of existing records by month Month_invoice
+            const currentRecordsMap = new Map<string, any>(
+              (existingSub.billingRecords || []).map((rec: any) => [`${rec.commissionMonth}_${rec.invoiceNum}`, rec])
+            );
+
+            // 🛠️ Overwrite or Append incoming records interactively
+            group.newRecords.forEach((freshRec) => {
+              const uniqueKey = `${freshRec.commissionMonth}_${freshRec.invoiceNum}`;
+              // If it matches an existing entry, it overwrites it (correcting data), otherwise it appends it
+              currentRecordsMap.set(uniqueKey, freshRec);
+            });
+
+            // Convert the deduplicated map back into a flat array structure
+            const mergedBillingRecords = Array.from(currentRecordsMap.values());
+
+
             // 🛠️ FIX: Append all new entries directly onto historical logs without filtering
             updates.push({
               id: existingSub.id,
@@ -344,7 +361,7 @@ export async function uploadBothData(jsonData: any[]) {
               serviceType: String(row['SERVICE TYPE'] || ''),
               oltIpAddress: String(row['OLT IP ADDRESS'] || ''),
               maintFranchiseeCode: String(row['MAINT FRANCHISEE CODE'] || ''),
-              billingRecords: [...(existingSub.billingRecords || []), ...group.newRecords]
+              billingRecords: mergedBillingRecords
             });
           } else {
             upsertedCount++;

@@ -1,0 +1,305 @@
+// app/actions/uploadReport.ts (Part 1 - Bulk Initialization)
+'use server';
+
+import { prisma } from '@/lib/prisma';
+import { revalidatePath } from 'next/cache';
+import crypto from 'crypto';
+
+// Reconstructs string variations like '202602' or standard formatting into clear display values
+function parseLeasedLineMonth(chargeMonth: any): string {
+    const str = String(chargeMonth || '').trim();
+    if (str.length === 6) {
+      const year = str.substring(0, 4);
+      const monthNum = parseInt(str.substring(4, 6), 10);
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      return `${months[monthNum - 1]}-${year}`; // Returns perfectly structured format e.g., 'FEB-2026'
+    }
+    return str || 'UNKNOWN';
+}
+
+
+export async function uploadBothData(jsonData: any[]) {
+    try {
+      if (!jsonData || jsonData.length === 0) return { success: false, error: 'Empty payload context.' };
+
+      // Inspects the very first row item of the sheet array to look up layout types accurately
+      const sampleRow = jsonData[0];
+  
+      const isLeasedLineReport = sampleRow && ('LC ID' in sampleRow || 'ACC NUM' in sampleRow || 'SERVICE SUBTYPE' in sampleRow);
+  
+      if (isLeasedLineReport) {
+        // 🛠️ FIX 1: PIVOT MAP CHANGED TO GROUP EXCLUSIVELY BY LC ID (TELEPHONE COLUMNS REMOVED)
+        const spreadsheetMap = new Map<string, { baseRow: any; records: Map<string, any> }>();
+  
+        for (const row of jsonData) {
+          const lcId = String(row['LC ID'] || '').trim();
+          if (!lcId) continue; // Skip lines missing a valid Circuit ID parameter flag
+  
+          const commissionMonth = parseLeasedLineMonth(row['CHARGE MONTH']);
+          const invoiceNum = String(row['LAST INV NUM'] || '').trim();
+          const lcEnd = String(row['LC END'] || 'END_A').trim(); // Capture End
+
+        //   Composite map key (combines month + invoice)
+          const compositeRecordKey = `${commissionMonth}_${invoiceNum}_${lcEnd}`
+
+          // Safely parse date strings without breaking into 'Invalid Date' formats
+          const rawInvDate = row['LAST INV DATE'];
+          const invoiceDate = rawInvDate ? new Date(rawInvDate) : new Date();
+          
+          const newRecord = {
+            commissionMonth,
+            invoiceNum,
+            invoiceDate: isNaN(invoiceDate.getTime()) ? new Date() : invoiceDate,
+            totalInvoiceAmount: parseFloat(row['LAST INV TOTAL MNY']) || 0,
+            paymentStatus: String(row['LAST BILL PAID STATUS'] || 'BILL_PENDING'),
+            revenueShareAmtGenerated: parseFloat(row['FINAL COMM AMT']) || 0,
+            remarks: `{${lcEnd}] ${String(row['REMARKS'] || '-')}`,
+          };
+  
+          if (!spreadsheetMap.has(lcId)) {
+            spreadsheetMap.set(lcId, { 
+              baseRow: row, 
+              records: new Map<string, any>() 
+            });
+          }
+  
+        //   const accountGroup = spreadsheetMap.get(lcId)!;
+        //   accountGroup.records.set(invoiceNum, newRecord);
+          spreadsheetMap.get(lcId)!.records.set(compositeRecordKey, newRecord)
+        }
+        // 🛠️ FIX 2: PRE-FETCH DATABASE HANDSHAKE COMPARES TARGETED LCID KEYS ONLY
+      const targetedLcIds = Array.from(spreadsheetMap.keys());
+      const existingLLs = await prisma.leasedLine.findMany({
+        where: { lcId: { in: targetedLcIds } }
+      });
+      const dbMap = new Map(existingLLs.map(l => [l.lcId, l]));
+
+      const updates = [];
+      const creates = [];
+
+      for (const [lcId, group] of spreadsheetMap.entries()) {
+        const row = group.baseRow;
+        const freshRecordsArray = Array.from(group.records.values());
+        const existingItem = dbMap.get(lcId);
+
+        const rawStartDat = row['BILLING START DAT'];
+        const serviceStartDate = rawStartDat ? new Date(rawStartDat) : new Date();
+
+        if (existingItem) {
+        //   const freshInvoiceNums = new Set(
+        //     freshRecordsArray.map(r => `${r.commissionMonth}_${r.invoiceNum}`));
+
+          // 🛠️ FIX 2: Generate tracking set using the extended composite keys
+          const freshCompositeKeys = new Set(
+            freshRecordsArray.map(r => {
+              // Extract the embedded endpoint tag back out of the remarks string text
+              const match = r.remarks.match(/^\[(.*?)\]/);
+              const endTag = match ? match[1] : 'END_A';
+              return `${r.commissionMonth}_${r.invoiceNum}_${endTag}`;
+            })
+          );
+
+        //   const historicFiltered = (existingItem.billingRecords || []).filter(
+        //     r => !freshInvoiceNums.has(`${r.commissionMonth}_${r.invoiceNum}`)
+        //   );
+          // 🛠️ FIX 3: Filter safely using the Month + Invoice + Endpoint compound matrix key
+          const historicFiltered = (existingItem.billingRecords || []).filter((r) => {
+            const match = (r.remarks || '').match(/^\[(.*?)\]/);
+            const endTag = match ? match[1] : 'END_A';
+            return !freshCompositeKeys.has(`${r.commissionMonth}_${r.invoiceNum}_${endTag}`);
+          });
+
+          updates.push({
+            lcId: lcId,
+            billingAccountNum: String(row['ACC NUM'] || ''),
+            serviceSubtype: String(row['SERVICE SUBTYPE'] || ''),
+            bandwidth: String(row['BANDWIDTH'] || ''),
+            oltIpAddress: String(row['OLT_IP'] || '-'),
+            maintFranchiseeCode: String(row['MAINT FRAN CODE'] || ''),
+            billingRecords: [...historicFiltered, ...freshRecordsArray]
+          });
+        } else {
+          creates.push({
+            id: crypto.randomBytes(12).toString('hex'),
+            lcId: lcId,
+            billingAccountNum: String(row['ACC NUM'] || ''),
+            serviceSubtype: String(row['SERVICE SUBTYPE'] || ''),
+            bandwidth: String(row['BANDWIDTH'] || ''),
+            serviceStartDate: isNaN(serviceStartDate.getTime()) ? new Date() : serviceStartDate,
+            zone: String(row['ZONE'] || ''),
+            circle: String(row['CIRCLE'] || ''),
+            ba: String(row['BA'] || 'BLY'),
+            ssa: String(row['SSA'] || 'BLY'),
+            oltIpAddress: String(row['OLT_IP'] || '-'),
+            maintFranchiseeCode: String(row['MAINT FRAN CODE'] || ''),
+            billingRecords: freshRecordsArray
+          });
+        }
+      }
+
+      // Parallel operational batch execution arrays pushing cleanly to Atlas
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < creates.length; i += CHUNK_SIZE) {
+        const chunk = creates.slice(i, i + CHUNK_SIZE);
+        await Promise.all(chunk.map(data => prisma.leasedLine.create({ data })));
+      }
+
+      for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+        const chunk = updates.slice(i, i + CHUNK_SIZE);
+        await Promise.all(chunk.map(item => prisma.leasedLine.update({
+          where: { lcId: item.lcId }, // Target update operations using matching unique circuit flags
+          data: {
+            billingAccountNum: item.billingAccountNum,
+            serviceSubtype: item.serviceSubtype,
+            bandwidth: item.bandwidth,
+            oltIpAddress: item.oltIpAddress,
+            maintFranchiseeCode: item.maintFranchiseeCode,
+            billingRecords: item.billingRecords
+          }
+        })));
+      }
+    } else {
+      // ----------------------------------------------------
+      // 📊 TARGET: Standalone FTTH STORAGE INGESTION ENGINE (ALL ROWS APPENDED)
+      // ----------------------------------------------------
+      try {
+         // 1. Group spreadsheet rows in-memory by Telephone Number
+         const ftthSpreadsheetMap = new Map<string, { baseRow: any; newRecords: any[] }>();
+
+         for (const row of jsonData) {
+           const telephoneNum = String(row['TELEPHONE NUM'] || '').trim();
+           if (!telephoneNum) continue;
+ 
+           const commissionMonth = String(row['COMMISSION MONTH'] || '').trim();
+           const invoiceNum = String(row['INVOICE NUM'] || '').trim();
+           const totalInvoiceAmount = parseFloat(row['TOTAL INVOICE AMOUNT']) || 0;
+           const revenueShareAmtGenerated = row['REVENUE SHARE AMT GENERATED'] ? parseFloat(row['REVENUE SHARE AMT GENERATED']) : null;
+ 
+           const newBillingRecord = {
+             commissionMonth,
+             invoiceNum,
+             invoiceDate: new Date(row['INVOICE DATE'] || Date.now()).toISOString(), // Stringify date safely for raw driver JSON mapping
+             totalInvoiceAmount,
+             paymentStatus: String(row['PAYMENT STATUS'] || 'FULLY PAID'),
+             revenueShareAmtGenerated,
+             remarks: String(row['REMARKS'] || '-'),
+           };
+ 
+           if (!ftthSpreadsheetMap.has(telephoneNum)) {
+             ftthSpreadsheetMap.set(telephoneNum, { baseRow: row, newRecords: [] });
+           }
+           ftthSpreadsheetMap.get(telephoneNum)!.newRecords.push(newBillingRecord);
+         }
+ 
+         // 2. Fetch existing profiles using Telephone Numbers in ONE single fast query
+         const allTelephoneNums = Array.from(ftthSpreadsheetMap.keys());
+         const existingSubscribers = await prisma.subscriber.findMany({
+           where: { telephoneNum: { in: allTelephoneNums } },
+           select: { id: true, telephoneNum: true, billingRecords: true }
+         });
+         const subscriberMap = new Map(existingSubscribers.map(s => [s.telephoneNum, s]));
+ 
+         // 🛠️ MONGODB NATIVE BULK OPERATION CONTAINER ARRAY
+         const bulkOperations: any[] = [];
+ 
+         for (const [telephoneNum, group] of ftthSpreadsheetMap.entries()) {
+           const row = group.baseRow;
+           const existingSub = subscriberMap.get(telephoneNum);
+ 
+           if (existingSub) {
+             // Append incoming rows onto historical arrays safely
+             const updatedBillingRecords = [...(existingSub.billingRecords || []), ...group.newRecords];
+ 
+             // 🚀 Add Update Operation to the bulk list
+             bulkOperations.push({
+               updateOne: {
+                 filter: { id: { $oid: existingSub.id } },
+                 update: {
+                   $set: {
+                     billingAccountNum: String(row['BILLING ACCC NUM'] || ''),
+                     telephoneNum: String(row['TELEPHONE NUM'] || ''),
+                     bbUserId: String(row['BB USER ID'] || ''),
+                     serviceType: String(row['SERVICE TYPE'] || ''),
+                     oltIpAddress: String(row['OLT IP ADDRESS'] || ''),
+                     maintFranchiseeCode: String(row['MAINT FRANCHISEE CODE'] || ''),
+                     billingRecords: updatedBillingRecords
+                   }
+                 }
+               }
+             });
+           } else {
+             // Generates raw 24-character hexadecimal MongoDB ObjectId primitives
+             const newHexId = crypto.randomBytes(12).toString('hex');
+ 
+             // 🚀 Add Create Operation to the bulk list
+             bulkOperations.push({
+               insertOne: {
+                 document: {
+                   id: { $oid: newHexId },
+                   billingAbillingAccountNum: String(row['BILLING ACCC NUM'] || ''),
+                   telephoneNum: String(row['TELEPHONE NUM'] || ''),
+                   bbUserId: String(row['BB USER ID'] || ''),
+                   serviceType: String(row['SERVICE TYPE'] || ''),
+                   serviceStartDate: new Date(row['SERVICE START DATE'] || Date.now()),
+                   zone: String(row['ZONE'] || 'SZ'),
+                   circle: String(row['CIRCLE'] || 'KT'),
+                   ba: String(row['BA'] || 'BLY'),
+                   ssa: String(row['SSA'] || 'BLY'),
+                   oltIpAddress: String(row['OLT IP ADDRESS'] || ''),
+                   maintFranchiseeCode: String(row['MAINT FRANCHISEE CODE'] || ''),
+                   billingRecords: group.newRecords
+                 }
+               }
+             });
+           }
+         }
+ 
+         // 🛠️ STEP 3: NATIVE BULK EXECUTION ENGINE - Executes 1,000+ rows in ONE single network roundtrip!
+         if (bulkOperations.length > 0) {
+           const CHUNK_SIZE = 400; // Chunk bulk commands slightly to conform with MongoDB server message payload limits
+           for (let i = 0; i < bulkOperations.length; i += CHUNK_SIZE) {
+             const operationsChunk = bulkOperations.slice(i, i + CHUNK_SIZE);
+             
+             // Execute raw MongoDB database operation commands directly bypassing Prisma framework latency loops
+             await prisma.$runCommandRaw({
+               bulkWrite: "subscriber", // Targets the exact MongoDB collection namespace model map
+               ops: operationsChunk,
+               ordered: false // Non-ordered execution processes tasks concurrently for massive write speed improvements
+             });
+           }
+         }
+       } catch (error: any) {
+         console.error('Prisma Serverless Ingestion Overload Failure:', error);
+         return { success: false, error: error.message || 'Serverless database transaction timeout.' };
+       }
+     }
+
+  
+      revalidatePath('/dashboard');
+      return { success: true, message: `Successfully synchronized ${jsonData.length} rows to MongoDB Atlas.` };
+    } catch (error: any) {
+      console.error('Database Sync Failure:', error);
+      return { success: false, error: error.message || 'Data stream broken.' };
+    }
+  }
+
+export async function deleteAllRecords() {
+    try {
+      // MongoDB drops all documents and their embedded array logs instantly
+      const result = await prisma.subscriber.deleteMany({});
+      
+      // Purge the local Next.js cache so the dashboard immediately shows 0 records
+      revalidatePath('/dashboard');
+      
+      return { 
+        success: true, 
+        message: `Successfully wiped all records from the database. Total removed: ${result.count}` 
+      };
+    } catch (error: any) {
+      console.error('Failed to clear MongoDB Collection:', error);
+      return { 
+        success: false, 
+        error: error.message || 'An unexpected error occurred while wiping data.' 
+      };
+    }
+  }

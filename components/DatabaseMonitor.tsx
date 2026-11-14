@@ -22,7 +22,7 @@ export default function DatabaseMonitor() {
     }
 
     checkStorageFootprint();
-    const interval = setInterval(checkStorageFootprint, 60000);
+    const interval = setInterval(checkStorageFootprint, 600000);
     return () => clearInterval(interval);
   }, []);
 
