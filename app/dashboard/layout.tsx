@@ -2,6 +2,7 @@
 import SignOutButton from '@/components/LogoutButton';
 import React from 'react';
 import Image from 'next/image';
+import DatabaseMonitor from '@/components/DatabaseMonitor';
 
 export default function DashboardLayout({
   children,
@@ -37,7 +38,7 @@ export default function DashboardLayout({
 
           {/* 🛠️ INTEGRATION AREA 1: BOTTOM OF THE LEFT VERTICAL SIDEBAR MENU GRID PANEL */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex flex-col gap-3">
-          <SignOutButton />
+          {/* <SignOutButton /> */}
           <div className="flex items-center gap-2 text-xs">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="text-slate-400 font-medium text-[11px]">2FA Firewall Active</span>
@@ -55,13 +56,21 @@ export default function DashboardLayout({
           </a>
         </nav>
 
+
         {/* Sidebar Footer System Footnotes Info Status */}
         <div className="p-4 border-t border-slate-800 bg-slate-950 text-xs flex flex-col gap-1.5">
+
+          <DatabaseMonitor />
+          
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-slate-400 font-medium">Atlas Node: Connected</span>
+            <span className="text-slate-400 font-medium">Node: Connected</span>
           </div>
-          <span className="text-[10px] text-slate-600 font-semibold">Production Build v1.4.2</span>
+          {/* <span className="text-[10px] text-slate-600 font-semibold">Production Build v1.4.2</span> */}
+
+          <div className="p-2 border-t border-slate-900/60">
+            <SignOutButton />
+          </div>
         </div>
       </aside>
       {/* // app/dashboard/layout.tsx (Part 2 - Global Top Header & Viewport Container) */}

@@ -1,10 +1,11 @@
 // components/DashboardClient.tsx (Part 1 - Core Imports, Interfaces & State)
 'use client';
 
-import React, { useState, useMemo, useTransition } from 'react';
+import React, { useState, useMemo, useTransition, useEffect } from 'react';
 import ExcelUploadParser from '@/components/ExcelUploadParser';
 import { uploadBothData } from '@/app/actions/uploadReport1';
 import * as XLSX from 'xlsx';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 
 interface LogRow {
@@ -26,16 +27,21 @@ interface DashboardClientProps {
 export default function DashboardClient({ ftthInitial, llInitial }: DashboardClientProps) {
   const [activeTab, setActiveTab] = useState<'FTTH' | 'LEASED_LINE'>('FTTH');
   const [searchQuery, setSearchQuery] = useState('');
+
+  
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // scrollable data for month-year
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [showAllMonths, setShowAllMonths] = useState(false);
 
   // 1. Hook to manage asynchronous server processing state indicators natively
   const [isPending, startTransition] = useTransition();
+
+  const [dbStorage, setDbStorage] = useState<{ usedMb: number; usagePercentage: number; isApproachingLimit: boolean } | null>(null);
 
   // 1. Direct active state target toggle pointer (Isolates collections completely)
   const activeTabRawData = useMemo(() => {
@@ -77,6 +83,64 @@ export default function DashboardClient({ ftthInitial, llInitial }: DashboardCli
     // return Array.from(new Set(months)).sort();
   }, [activeTabRawData]);
 
+  // Hierarchical Tree Engine: regroup raw months into structural calendar
+  const yearMonthTree = useMemo(() => {
+    const tree: Record<string, string[]> = {};
+    availableMonths.forEach((mStr) => {
+      const [_, yearToken] = mStr.split('-');
+      if(yearToken){
+        if(!tree[yearToken]) tree[yearToken] = [];
+        tree[yearToken].push(mStr);
+      }
+    });
+    return tree; // e.g., { "2026" :["JAN-2026", "FEB-2026"], "2025" :["DEC-2025", "NOV-2025"]}
+  }, [availableMonths]);
+
+  const uniqueYearsList = useMemo(() => Object.keys(yearMonthTree).sort(), [yearMonthTree]);
+
+  // Handle clicking year parent checkbox selectors
+  const handleYearToggle = (year: string) => {
+    setSelectedYears((prev) => {
+      const isChecking = !prev.includes(year);
+      const updatedYears = isChecking ? [...prev, year] : prev.filter((y) => y !== year);
+
+      // Auto-clear child month checkboxes if a parent year is unchecked to prevent hidden selections
+      if(!isChecking) {
+        const monthsInYear = yearMonthTree[year] || [];
+        setSelectedMonths((mPrev) => mPrev.filter((m) => !monthsInYear.includes(m)));
+      }
+      return updatedYears
+    })
+    setCurrentPage(1);
+  }
+
+  // Multi-Tier cascading Filter Matrix
+  // Step 1: Determine exactly which Month-Year columns should appear on the Screen
+  const targetActiveMonths = useMemo(() => {
+    // Case A: No Year checkboxes are checkmarked -> Fall back to displaying all available columns
+    if(selectedYears.length === 0) return [...availableMonths];
+
+    // Case B: Parent Years are checkmarked -> Figure out if child months are also checkmarked
+    const activeMonths: string[] = [];
+    selectedYears.forEach((year) => {
+      const allMonthsInYear = yearMonthTree[year] || [];
+      const checkedMonthsInYear = allMonthsInYear.filter((m) => selectedMonths.includes(m));
+
+      // 🔍 KEY RULE: If a year is checkmarked but NO specific month is ticked, include ALL months for that year
+      if(checkedMonthsInYear.length === 0){
+        activeMonths.push(...allMonthsInYear);
+      }else{
+        // If specific months are checkmarked under that year, show ONLY those selected months
+        activeMonths.push(...checkedMonthsInYear);
+      }
+    })
+
+    return Array.from(new Set(activeMonths)).sort((a, b) => availableMonths.indexOf(a) - availableMonths.indexOf(b));
+
+  }, [selectedYears, selectedMonths, availableMonths, yearMonthTree]);
+
+
+
   // Handle checking and unchecking individual month checkboxes
   const handleMonthToggle = (month: string) => {
     setSelectedMonths((prev) =>
@@ -84,13 +148,12 @@ export default function DashboardClient({ ftthInitial, llInitial }: DashboardCli
     );
     setCurrentPage(1); // Force return page index pointer safely back to 1
   };
-// components/DashboardClient.tsx (Part 2 - Pivot Logic, Keyword Matching & Pagination)
+  // components/DashboardClient.tsx (Part 2 - Pivot Logic, Keyword Matching & Pagination)
 
   // 2. Primary Filter Tier: Filter initial rows by checked Month-Year checkboxes
   const monthFilteredData = useMemo(() => {
-    if (selectedMonths.length === 0) return activeTabRawData;
-    return activeTabRawData.filter((row) => selectedMonths.includes(row.month));
-  }, [selectedMonths, activeTabRawData]);
+    return activeTabRawData.filter((row) => targetActiveMonths.includes(row.month))
+  }, [targetActiveMonths, activeTabRawData])
 
   // 3. Pivot Transformation: Group by telephone number and aggregate values horizontally
   const pivotedResults = useMemo(() => {
@@ -151,14 +214,7 @@ export default function DashboardClient({ ftthInitial, llInitial }: DashboardCli
       // 🛠️ FIX: Clean regex matching text extraction logic
       const remarksText = String(row.remarks || '').toUpperCase().trim();
 
-      // const match = remarksText.match(/^\[(.*?)\]/);
-
-      // if (match && match[1]) {
-      //   grouped[identityKey].endpointTags[row.month].add(match[1].trim());
-      // } else {
-      //   grouped[identityKey].endpointTags[row.month].add('END_A');
-      // }
-
+      
       if (remarksText.includes('END_A') || remarksText.includes('END_A]')) {
         grouped[identityKey].endpointTags[row.month].add('END_A');
       } else if (remarksText.includes('END_B') || remarksText.includes('END_B]')) {
@@ -189,22 +245,20 @@ export default function DashboardClient({ ftthInitial, llInitial }: DashboardCli
   }, [searchQuery, pivotedResults]);
 
   // Determine dynamic month headers to map horizontally across grid templates
-  const orderedSelectedMonths = useMemo(() => {
-    if (selectedMonths.length > 0) 
-      // If specific boxer are ticked, map them following the same order rules
-      return [...selectedMonths].sort((a, b) => availableMonths.indexOf(a) - availableMonths.indexOf(b));
-    return [...availableMonths]; // Seamlessly maps down descedning batch rows
-  }, [selectedMonths, availableMonths]);
+  // const orderedSelectedMonths = useMemo(() => {
+  //   if (selectedMonths.length > 0) 
+  //     // If specific boxer are ticked, map them following the same order rules
+  //     return [...selectedMonths].sort((a, b) => availableMonths.indexOf(a) - availableMonths.indexOf(b));
+  //   return [...availableMonths]; // Seamlessly maps down descedning batch rows
+  // }, [selectedMonths, availableMonths]);
 
   const activeMonthColumns = useMemo(() => {
-    if (showAllMonths) {
-      return orderedSelectedMonths;
-    }
-    return orderedSelectedMonths.slice(0, 3); // Limit to the first 4 columns
-  }, [orderedSelectedMonths, showAllMonths]);
+    if (showAllMonths) return targetActiveMonths;
+    return targetActiveMonths.slice(0, 3); // Limit to the first 4 columns
+  }, [targetActiveMonths, showAllMonths]);
 
    // Total hidden months counter badge
-   const hiddenMonthsCount = orderedSelectedMonths.length - activeMonthColumns.length;
+   const hiddenMonthsCount = targetActiveMonths.length - activeMonthColumns.length;
 
   // Pagination bounds arithmetic setup
   const totalRecords = finalFilteredResults.length;
@@ -304,10 +358,56 @@ const handleDownloadExcel = () => {
     alert('Failed to generate export file pipeline configuration.');
   }
 };
-// components/DashboardClient.tsx (Part 4 - Core Layout JSX Markup View Grid)
+
+  // Hook to fetch and poll database capacity limits instantly upon mounting the workspace dashboard
+  useEffect(() => {
+    async function checkStorageFootprint() {
+      // Direct client check lookup call to our Server Action background monitor engine
+      const { getDatabaseStorageStatus } = await import('@/app/actions/dbStats');
+      const status = await getDatabaseStorageStatus();
+      if (status.success) {
+        setDbStorage({
+          usedMb: status.usedMb,
+          usagePercentage: status.usagePercentage,
+          isApproachingLimit: status.isApproachingLimit
+        });
+      }
+    }
+
+    checkStorageFootprint();
+    // Poll the cluster size every 60 seconds to keep track of concurrent updates
+    const interval = setInterval(checkStorageFootprint, 60000);
+    return () => clearInterval(interval);
+  }, [ftthInitial, llInitial]); // Refreshes automatically whenever database rows change
+
 
 return (
   <div className="space-y-6">
+
+    {/* 🛠️ 2FA SECURED PERSISTENT DATABASE STORAGE OVERFLOW WARNING ALERT BANNER */}
+    {dbStorage?.isApproachingLimit && (
+        <div className="bg-gradient-to-r from-red-600 via-amber-600 to-red-600 text-white px-6 py-4 rounded-xl shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-pulse border border-red-500/30">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl select-none">⚠️</span>
+            <div>
+              <h4 className="text-sm font-black tracking-wide uppercase">Critical Storage Warning: Database Cluster Filling Up!</h4>
+              <p className="text-xs text-red-50/90 font-medium mt-0.5">
+                Your MongoDB Atlas allocation has consumed <span className="font-bold underline">{dbStorage.usedMb} MB</span> ({Math.round(dbStorage.usagePercentage)}%) of your current 512 MB free tier quota limits.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Visual Progress Data Bar Grid Indicator */}
+            <div className="w-24 bg-black/30 h-2 rounded-full overflow-hidden border border-white/10 hidden md:block">
+              <div className="bg-white h-full rounded-full" style={{ width: `${dbStorage.usagePercentage}%` }}></div>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider bg-black/40 px-3 py-1.5 rounded-lg border border-white/10">
+              Action Required
+            </span>
+          </div>
+        </div>
+      )}
+
     {/* SEPARATED ISOLATED COLLECTION TAB CONTROL HEADERS */}
     <div className="border-b border-gray-200 bg-white px-6 py-2 rounded-xl shadow-sm flex items-center justify-between">
       <div className="flex space-x-6">
@@ -344,27 +444,71 @@ return (
       )}
     </section>
 
-    {/* REACTIVE CHECKBOX FILTER PANEL GRID */}
-    <section className="bg-white p-6 rounded-xl border shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-gray-700">Filter by Month-Year Batch</h3>
-        {selectedMonths.length > 0 && (
-          <button onClick={() => setSelectedMonths([])} className="text-xs text-blue-600 font-semibold hover:underline">Clear Selection</button>
-        )}
-      </div>
-      {availableMonths.length > 0 ? (
-        <div className="flex flex-wrap gap-3">
-          {availableMonths.map(m => (
-            <label key={m} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm cursor-pointer transition-colors ${selectedMonths.includes(m) ? 'border-blue-500 bg-blue-50 text-blue-700 font-semibold' : 'border-gray-200 bg-gray-50 text-gray-600'}`}>
-              <input type="checkbox" checked={selectedMonths.includes(m)} onChange={() => handleMonthToggle(m)} className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" />
-              {m}
-            </label>
-          ))}
+    {/* NESTED YEAR-MONTH CONTROLLER ACCORDION PANEL */}
+    <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b pb-2">
+          <h3 className="text-sm font-extrabold text-gray-800">Filter Revenue Ledger by Year & Month</h3>
+          {(selectedYears.length > 0 || selectedMonths.length > 0) && (
+            <button 
+              onClick={() => { setSelectedYears([]); setSelectedMonths([]); setCurrentPage(1); }} 
+              className="text-xs text-blue-600 font-bold hover:underline"
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
-      ) : (
-        <p className="text-xs text-gray-400 animate-pulse">No active batches tracked. Drag and drop a data spreadsheet file above.</p>
-      )}
-    </section>
+
+        {uniqueYearsList.length > 0 ? (
+          <div className="space-y-4 divide-y divide-gray-100">
+            {uniqueYearsList.map((year) => {
+              const isYearChecked = selectedYears.includes(year);
+              const monthsInYear = yearMonthTree[year] || [];
+
+              return (
+                <div key={year} className="pt-3 first:pt-0 space-y-2">
+                  {/* Parent Year Checkbox Row */}
+                  <label className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-black cursor-pointer transition-colors max-w-xs ${isYearChecked ? 'border-blue-500 bg-blue-50/50 text-blue-700' : 'border-gray-200 bg-gray-50'}`}>
+                    <input 
+                      type="checkbox" 
+                      checked={isYearChecked} 
+                      onChange={() => handleYearToggle(year)} 
+                      className="rounded text-blue-600 h-4 w-4" 
+                    />
+                    <span>📅 Year {year} Ledger</span>
+                  </label>
+
+                  {/* Nested Child Month Checklist (Reveals dynamically when parent year is checked) */}
+                  {isYearChecked && (
+                    <div className="pl-6 pt-1 flex flex-wrap gap-2 animate-fadeIn">
+                      {monthsInYear.map((mStr) => {
+                        const isMonthChecked = selectedMonths.includes(mStr);
+                        const [monthLabel] = mStr.split('-');
+
+                        return (
+                          <label key={mStr} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors font-semibold ${isMonthChecked ? 'border-indigo-500 bg-indigo-50 text-indigo-700 font-bold' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                            <input 
+                              type="checkbox" 
+                              checked={isMonthChecked} 
+                              onChange={() => handleMonthToggle(mStr)} 
+                              className="rounded text-indigo-600 h-3.5 w-3.5" 
+                            />
+                            <span className='flex flex-1 gap-1 relative'>
+                              {monthLabel}-{year} 
+                              <span className='absolute -mx-10 -my-3 flex justify-center bg-slate-600 text-[6pt] border rounded-xl border-slate-300 px-1.5 text-emerald-100'>Payout</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 animate-pulse">No active data rows found. Upload an Excel log file above.</p>
+        )}
+      </section>
 
     {/* DYNAMIC LOOKUP INPUT FORM SEARCH SECTION */}
     <section className="bg-white p-6 rounded-xl border shadow-sm">
@@ -386,7 +530,7 @@ return (
         </div>
         <div className="flex items-center gap-3">
           {/* 🛠️ DYNAMIC EXPANSION TOGGLE CONTROLLER BUTTON */}
-          {orderedSelectedMonths.length > 3 && (
+          {targetActiveMonths.length > 3 && (
             <button
               onClick={() => setShowAllMonths(!showAllMonths)}
               className={`rounded-lg px-4 py-2 text-xs font-bold border transition-colors inline-flex items-center gap-1.5 ${
@@ -412,9 +556,26 @@ return (
               )}
             </button>
           )}
-          <button onClick={handleDownloadExcel} disabled={totalRecords === 0} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+          {/* <button onClick={handleDownloadExcel} disabled={totalRecords === 0} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
             📥 Export Tab Sheet (.xlsx)
-          </button>
+          </button> */}
+
+          <TooltipProvider delay={200}>
+            <Tooltip>
+              {/* Wrapping the button in a div ensures the tooltip works even when the button is disabled */}
+              <TooltipTrigger
+                    onClick={handleDownloadExcel} 
+                    disabled={totalRecords === 0} 
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                  >
+                    📥 Export Tab Sheet (.xlsx)
+                  
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs bg-neutral-900 text-white p-2 text-xs rounded shadow-md border border-neutral-800">
+                <p>click on <span className='text-amber-600'>Show all  months </span> to get all reports before clicking on Export otherwise <span className='text-red-600'>displayed months </span> will be exported </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <select value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }} className="border rounded-lg text-xs font-semibold px-2 py-2 bg-white text-gray-700 shadow-sm focus:outline-none">
             <option value={10}>Show 10</option> 
             <option value={25}>Show 25</option> 

@@ -19,7 +19,7 @@ export const authOptions: NextAuthOptions = {
           name: profile.name,
           email: profile.email,
           image: profile.picture,
-          role: "ADMIN", // Elevates Google users to admin automatically on registration
+          role: "USER", // Elevates Google users to admin automatically on registration
         };
       },
     }),
